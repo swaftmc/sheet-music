@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sheet Music Transcriber</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.9/build/opensheetmusicdisplay.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  form { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; padding: 1rem; background: #f4f4f6; border-radius: 8px; }
+  label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; }
+  button, .btn { padding: .5rem 1rem; border: 0; border-radius: 6px; background: #2d5bd7; color: #fff; cursor: pointer; text-decoration: none; font-size: .95rem; }
+  button:disabled { background: #999; cursor: wait; }
+  #status { margin: 1rem 0; }
+  #status.error { color: #b00020; }
+  #actions { display: none; gap: .5rem; margin-bottom: 1rem; }
+  #sheet { background: #fff; }
+  @media print { form, #actions, #status, h1, p.note { display: none !important; } body { margin: 0; max-width: none; } }
+</style>
+</head>
+<body>
+<h1>Sheet Music Transcriber</h1>
+<p class="note">Upload a recording (audio or video). Works best on a single instrument or voice; full band mixes give rough results.</p>
+
+<form id="form">
+  <label>Audio or video file
+    <input type="file" name="file" accept="audio/*,video/*" required>
+  </label>
+  <label>Model
+    <select name="model">
+      {% for id, (label, _) in models.items() %}<option value="{{ id }}">{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Output instrument
+    <select name="instrument">
+      {% for i in instruments %}<option value="{{ i }}">{{ i }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Tempo (BPM, blank = auto)
+    <input type="number" name="bpm" min="30" max="300" placeholder="auto">
+  </label>
+  <button id="go">Transcribe</button>
+</form>
+
+<div id="status" role="status" aria-live="polite"></div>
+<div id="actions">
+  <a class="btn" id="xml" href="#">Download MusicXML</a>
+  <a class="btn" id="mid" href="#">Download MIDI</a>
+  <button type="button" onclick="window.print()">Save as PDF / Print</button>
+</div>
+<div id="sheet"></div>
+
+<script>
+const form = document.getElementById("form"), status = document.getElementById("status"),
+      go = document.getElementById("go"), actions = document.getElementById("actions");
+const MESSAGES = {{ messages | tojson }};
+const osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay("sheet", { autoResize: true, drawTitle: true });
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  go.disabled = true; actions.style.display = "none"; status.className = "";
+  status.textContent = MESSAGES[form.model.value];
+  try {
+    const res = await fetch("/transcribe", { method: "POST", body: new FormData(form) });
+    const data = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
+    if (!res.ok) throw new Error(data.error);
+    const base = `/jobs/${data.job}/`;
+    await osmd.load(await (await fetch(base + "score.musicxml")).text());
+    osmd.render();
+    document.getElementById("xml").href = base + "score.musicxml?dl=1";
+    document.getElementById("mid").href = base + "score.mid?dl=1";
+    actions.style.display = "flex";
+    status.textContent = `${data.notes} notes detected at ${data.bpm} BPM for ${data.instrument}.`;
+  } catch (err) {
+    status.className = "error"; status.textContent = err.message;
+  } finally { go.disabled = false; }
+});
+</script>
+</body>
+</html>

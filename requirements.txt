@@ -1,0 +1,9 @@
+basic-pitch[onnx]
+music21
+flask
+imageio-ffmpeg
+piano_transcription_inference
+demucs
+# CPU builds of torch/torchaudio: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+torch
+torchaudio
